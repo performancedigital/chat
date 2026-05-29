@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { systemPrompt } from '@/lib/prompt';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendEvolutionMessage } from '@/lib/evolution';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 export async function POST(req: Request) {
   try {
@@ -36,32 +38,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ text: '' }); // Do not reply with AI if human took over
     }
 
-    // 3. Format history for Gemini
+    // 3. Format history for OpenAI
     const history = messages?.map(msg => ({
-      role: msg.sender === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
+      role: msg.sender === 'user' ? 'user' : (msg.sender === 'ai' ? 'assistant' : 'assistant'),
+      content: msg.content
     })) || [];
+
+    // Also tell GPT to try to output a JSON block at the end if it collected the 4 info pieces.
+    const extractionPrompt = `\nSe você já conseguiu extrair Nome, Telefone, E-mail e Profissão/Idade, adicione no final da sua resposta (e apenas quando tiver todos) um bloco JSON exatamente com o seguinte formato, não fale mais nada depois dele: \`\`\`json\n{"extracted": true, "nome": "...", "telefone": "...", "email": "...", "profissao": "..."}\n\`\`\``;
 
     // Append the new message
     history.push({
       role: 'user',
-      parts: [{ text: message }]
+      content: message + extractionPrompt
     });
 
-    // 4. Generate response with Gemini
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction: systemPrompt });
-
-    // Also tell Gemini to try to output a JSON block at the end if it collected the 4 info pieces.
-    const extractionPrompt = `\nSe você já conseguiu extrair Nome, Telefone, E-mail e Profissão/Idade, adicione no final da sua resposta (e apenas quando tiver todos) um bloco JSON exatamente com o seguinte formato, não fale mais nada depois dele: \`\`\`json\n{"extracted": true, "nome": "...", "telefone": "...", "email": "...", "profissao": "..."}\n\`\`\``;
-
-    history[history.length - 1].parts[0].text += extractionPrompt;
-
-    const chat = model.startChat({
-      history: history.slice(0, -1),
+    // 4. Generate response with OpenAI (GPT-4o-mini as it is cheap and conversational)
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        // @ts-expect-error type matching for dynamic array
+        ...history
+      ],
+      temperature: 0.7,
     });
 
-    const result = await chat.sendMessage(message + extractionPrompt);
-    let text = result.response.text();
+    let text = completion.choices[0].message.content || '';
 
     // 5. Check if JSON extraction is present
     let extractedData = null;
