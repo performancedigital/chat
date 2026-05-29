@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, Check, CheckCheck } from 'lucide-react';
+import { Send, CheckCheck } from 'lucide-react';
+import { RealtimeChannel } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 
 type Message = {
@@ -21,39 +22,44 @@ export default function Home() {
 
   useEffect(() => {
     // Initialize session
-    let sid = localStorage.getItem('chat_session_id');
-    if (!sid) {
-      sid = uuidv4();
-      localStorage.setItem('chat_session_id', sid);
-      // Create session in DB
-      supabase.from('sessions').insert({ id: sid }).then();
-    }
-    setSessionId(sid);
+    const initSession = async () => {
+      let sid = localStorage.getItem('chat_session_id');
+      if (!sid) {
+        sid = uuidv4();
+        localStorage.setItem('chat_session_id', sid);
+        // Create session in DB
+        await supabase.from('sessions').insert({ id: sid });
+      }
+      setSessionId(sid);
 
-    // Load history
-    supabase
-      .from('messages')
-      .select('*')
-      .eq('session_id', sid)
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        if (data) setMessages(data);
-      });
+      // Load history
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('session_id', sid)
+        .order('created_at', { ascending: true });
+      if (data) setMessages(data);
 
-    // Realtime subscription
-    const channel = supabase
-      .channel('public:messages')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: \`session_id=eq.\${sid}\` }, payload => {
-        const newMessage = payload.new as Message;
-        setMessages(prev => {
-          if (prev.find(m => m.id === newMessage.id)) return prev;
-          return [...prev, newMessage];
-        });
-      })
-      .subscribe();
+      // Realtime subscription
+      const channel = supabase
+        .channel('public:messages')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `session_id=eq.${sid}` }, payload => {
+          const newMessage = payload.new as Message;
+          setMessages(prev => {
+            if (prev.find(m => m.id === newMessage.id)) return prev;
+            return [...prev, newMessage];
+          });
+        })
+        .subscribe();
+
+      return channel;
+    };
+
+    let activeChannel: RealtimeChannel | null = null;
+    initSession().then(ch => { activeChannel = ch; });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (activeChannel) supabase.removeChannel(activeChannel);
     };
   }, []);
 
@@ -114,8 +120,8 @@ export default function Home() {
         )}
         
         {messages.map((m) => (
-          <div key={m.id} className={\`flex \${m.sender === 'user' ? 'justify-end' : 'justify-start'}\`}>
-            <div className={\`max-w-[85%] rounded-lg p-2 px-3 shadow-sm \${m.sender === 'user' ? 'bg-[#d9fdd3]' : 'bg-white'}\`}>
+          <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-lg p-2 px-3 shadow-sm ${m.sender === 'user' ? 'bg-[#d9fdd3]' : 'bg-white'}`}>
               <p className="text-sm text-gray-800 break-words whitespace-pre-wrap">{m.content}</p>
               <div className="text-[10px] text-gray-500 text-right mt-1 flex justify-end items-center gap-1">
                 <span>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>

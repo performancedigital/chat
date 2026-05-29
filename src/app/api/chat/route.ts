@@ -65,14 +65,14 @@ export async function POST(req: Request) {
 
     // 5. Check if JSON extraction is present
     let extractedData = null;
-    const jsonMatch = text.match(/\`\`\`json\n({.*?})\n\`\`\`/s);
+    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
     if (jsonMatch) {
       try {
         extractedData = JSON.parse(jsonMatch[1]);
         // Remove the json block from the text sent to user
-        text = text.replace(/\`\`\`json\n({.*?})\n\`\`\`/s, '').trim();
+        text = text.replace(/```json\n([\s\S]*?)\n```/, '').trim();
       } catch (e) {
-        console.error('Failed to parse extracted JSON');
+        console.error('Failed to parse extracted JSON', e);
       }
     }
 
@@ -82,6 +82,10 @@ export async function POST(req: Request) {
       .insert({ session_id: sessionId, sender: 'ai', content: text })
       .select()
       .single();
+
+    if (aiError) {
+      console.error('Failed to save AI message', aiError);
+    }
 
     // 7. If extracted, update session and send Evolution message
     if (extractedData && extractedData.extracted && session.status !== 'qualified') {
@@ -99,14 +103,15 @@ export async function POST(req: Request) {
       // Trigger evolution api
       await sendEvolutionMessage(
         extractedData.telefone, 
-        \`Olá ${extractedData.nome}, aqui é a equipe da Performance Educacional! Vi que você estava conversando com nosso assistente virtual. Como podemos te ajudar agora a dar o próximo passo na sua carreira?\`
+        `Olá ${extractedData.nome}, aqui é a equipe da Performance Educacional! Vi que você estava conversando com nosso assistente virtual. Como podemos te ajudar agora a dar o próximo passo na sua carreira?`
       );
     }
 
     return NextResponse.json({ text, messageId: aiMessage?.id });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Chat API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

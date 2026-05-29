@@ -43,7 +43,7 @@ export default function AdminPage() {
     // Subscribe to new sessions
     const sessionChannel = supabase
       .channel('public:sessions')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
         fetchSessions(); // Refresh list on change
       })
       .subscribe();
@@ -69,8 +69,8 @@ export default function AdminPage() {
 
     // Subscribe to new messages for this session
     const messageChannel = supabase
-      .channel(\`public:messages:\${selectedSession.id}\`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: \`session_id=eq.\${selectedSession.id}\` }, (payload) => {
+      .channel(`public:messages:${selectedSession.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `session_id=eq.${selectedSession.id}` }, (payload) => {
         setMessages(prev => [...prev, payload.new as Message]);
       })
       .subscribe();
@@ -112,12 +112,12 @@ export default function AdminPage() {
             <div 
               key={s.id} 
               onClick={() => setSelectedSession(s)}
-              className={\`p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 \${selectedSession?.id === s.id ? 'bg-blue-50' : ''}\`}
+              className={`p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 ${selectedSession?.id === s.id ? 'bg-blue-50' : ''}`}
             >
               <div className="font-semibold">{s.name || 'Lead Anônimo'}</div>
               <div className="text-sm text-gray-500 truncate">ID: {s.id.split('-')[0]}...</div>
               <div className="flex justify-between items-center mt-2">
-                <span className={\`text-xs px-2 py-1 rounded \${s.status === 'qualified' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}\`}>
+                <span className={`text-xs px-2 py-1 rounded ${s.status === 'qualified' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                   {s.status === 'qualified' ? 'Qualificado' : 'Conversando'}
                 </span>
                 {s.human_takeover && <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Humano</span>}
@@ -143,7 +143,7 @@ export default function AdminPage() {
               </div>
               <button 
                 onClick={toggleHumanTakeover}
-                className={\`px-4 py-2 rounded font-medium text-sm transition-colors \${selectedSession.human_takeover ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-blue-500 text-white hover:bg-blue-600'}\`}
+                className={`px-4 py-2 rounded font-medium text-sm transition-colors ${selectedSession.human_takeover ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
               >
                 {selectedSession.human_takeover ? 'Devolver para IA' : 'Assumir Conversa'}
               </button>
@@ -152,8 +152,8 @@ export default function AdminPage() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {messages.map(m => (
-                <div key={m.id} className={\`flex \${m.sender === 'user' ? 'justify-start' : 'justify-end'}\`}>
-                  <div className={\`max-w-[70%] p-3 rounded-lg shadow-sm \${m.sender === 'user' ? 'bg-white border border-gray-200' : m.sender === 'admin' ? 'bg-blue-100' : 'bg-green-100'}\`}>
+                <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[70%] p-3 rounded-lg shadow-sm ${m.sender === 'user' ? 'bg-white border border-gray-200' : m.sender === 'admin' ? 'bg-blue-100' : 'bg-green-100'}`}>
                     <div className="text-xs text-gray-500 mb-1 font-semibold uppercase">{m.sender === 'ai' ? 'IA' : m.sender}</div>
                     <div className="text-gray-800 whitespace-pre-wrap">{m.content}</div>
                   </div>
@@ -181,7 +181,7 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="p-4 bg-gray-200 text-center text-gray-600 text-sm">
-                A IA está no controle desta conversa. Clique em "Assumir Conversa" para enviar mensagens.
+                A IA está no controle desta conversa. Clique em &quot;Assumir Conversa&quot; para enviar mensagens.
               </div>
             )}
           </>
